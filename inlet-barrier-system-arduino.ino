@@ -1,47 +1,49 @@
+// IBF Control Panel
+
 #include <ezButton.h>
 
 // Definicja enuma Side reprezentującego strony (LEWA, PRAWA)
 enum Side {LEFT, RIGHT};
 
-// Tablica zawierająca piny diod panelu lewego
+// Piny i stany lewej sekcji diod
 static const int leftDiodeArr[] = {52, 50, 48, 46, 49, 47, 53, 51};
+int leftNumOfActiveDiodes = 1;
 
-// Tablica zawierająca piny diod panelu prawego
+// Piny i stany prawej sekcji diod
 static const int rightDiodeArr[] = {23, 25, 27, 29, 28, 26, 24, 22};
+int rightNumOfActiveDiodes = 1;
 
-// Piny testowe panelu lewego
-static const int leftTestDiodeUp = 39;    // tested on A8
-static const int leftTestButton = 21;     // tested on A9
-static const int leftTestDiodeDown = 41;  // tested on A10
+// Piny i stany lewego panelu testowego
+static const int leftTestDiodeUp = 39;    
+static const int leftTestButton = 21;     
+static const int leftTestDiodeDown = 41;  
+int leftFaultState;
 
-// Piny testowe panelu prawego
-static const int rightTestDiodeUp = 33;   // tested on 7
-static const int rightTestButton = 19;    // tested on 6
-static const int rightTestDiodeDown = 35; // tested on 5
+// Piny i stany prawego panelu testowego
+static const int rightTestDiodeUp = 33;   
+static const int rightTestButton = 19;    
+static const int rightTestDiodeDown = 35; 
+int rightFaultState;
 
 // Piny sekcji recall
 static const int recallDiodeUp = A0;
-static const int recallButton = 20;       // tested on A1
-static const int recallDiodeDown = 37;    // tested on A2
+static const int recallButton = 20;      
+static const int recallDiodeDown = 37;    
 
-// Liczba diod włączonych po stronie lewej i prawej
-int leftNumOfActiveDiodes = 0;
-int rightNumOfActiveDiodes = 0;
-
-// Liczba diod podświetlających
-static const int backlightDiodes = 8;
-
-// Zmienna przechowująca dane wejściowe
+// Zmienna przechowująca aktualny sygnał sterujący
 String inputData;
 
 // Inicjalizacja przełączników bypass przy pomocy biblioteki ezButton
-ezButton rightToggleSwitch(18); // tested on 13
-ezButton leftToggleSwitch(A15); // tested on 10
+ezButton rightToggleSwitch(18); 
+ezButton leftToggleSwitch(A15); 
 
 // Funkcja inicjalizująca ustawienia
 void setup() {
   Serial.begin(9600);
-  Serial.println("Inicjalizacja UART");
+  Serial.println("[SYSTEM] UART initialized successfully.");
+
+  leftFaultState = digitalRead(leftTestDiodeUp);
+  rightFaultState = digitalRead(rightTestDiodeUp);
 
   // Inicjalizacja paneli diodowych
   initDiodeArr(LEFT, LOW);
@@ -56,9 +58,6 @@ void setup() {
   // Inicjalizacja sekcji recall
   initRecallPanel();
 
-  // Inicjalizacja diod podświetlających
-  // initBacklightDiodes();
-
   // Ustawienie czasu oczekiwania na stabilizację stanu przycisków
   leftToggleSwitch.setDebounceTime(50);
   rightToggleSwitch.setDebounceTime(50);
@@ -66,7 +65,8 @@ void setup() {
 
 // Funkcja loop(), główna pętla programu
 void loop() {
-  // Obsługa przycisku po lewej stronie
+
+  // Obsługa przełącznika po lewej stronie
   leftToggleSwitch.loop();
   int leftToggleSwitchState = leftToggleSwitch.getState();
   if (leftToggleSwitchState == HIGH)
@@ -74,7 +74,7 @@ void loop() {
   else
     digitalWrite(leftTestDiodeDown, HIGH);
 
-  // Obsługa przycisku po prawej stronie
+  // Obsługa przełącznika po prawej stronie
   rightToggleSwitch.loop();
   int rightToggleSwitchState = rightToggleSwitch.getState();
   if (rightToggleSwitchState == HIGH)
@@ -94,6 +94,7 @@ void loop() {
   // Odczyt danych z interfejsu UART
   if (Serial.available()) {
     inputData = Serial.readString();
+    Serial.println("[SYSTEM] input->" + inputData);
     int index = inputData.charAt(1) - '0';
 
     /** 
@@ -102,12 +103,15 @@ void loop() {
      *
      * INPUT: L0, L1, L2, L3, L4, L5, L6, L7, L8
      */
-    if (inputData.charAt(0) == 'L') {
+    if (inputData.charAt(0) == 'L' || inputData.charAt(0) == 'l') {
+      if(index == 9)
+        --index;
+
       for (int i = 0; i < 8; i++)
         digitalWrite(leftDiodeArr[i], LOW);
 
-      for (int i = 0; i < index; i++)
-        digitalWrite(leftDiodeArr[i], HIGH);
+      // for (int i = 0; i < index; i++)
+      //   digitalWrite(leftDiodeArr[i], HIGH);
 
       leftNumOfActiveDiodes = index;
     }
@@ -118,12 +122,15 @@ void loop() {
      *
      * INPUT: R0, R1, R2, R3, R4, R5, R6, R7, R8
      */
-    if (inputData.charAt(0) == 'R') {
+    if (inputData.charAt(0) == 'R' || inputData.charAt(0) == 'r') {
+      if(index == 9)
+        --index;
+
       for (int i = 0; i < 8; i++)
         digitalWrite(rightDiodeArr[i], LOW);
 
-      for (int i = 0; i < index; i++)
-        digitalWrite(rightDiodeArr[i], HIGH);
+      // for (int i = 0; i < index; i++)
+      //   digitalWrite(rightDiodeArr[i], HIGH);
 
       rightNumOfActiveDiodes = index;
     }
@@ -135,13 +142,15 @@ void loop() {
      *
      * INPUT: F1, F2
      */
-    if (inputData.charAt(0) == 'F') {
+    if (inputData.charAt(0) == 'F' || inputData.charAt(0) == 'f') {
       if (index == 1) {
         int diodeState = digitalRead(leftTestDiodeUp);
-        digitalWrite(leftTestDiodeUp, !diodeState);
+        leftFaultState = 1;
+        digitalWrite(leftTestDiodeUp, HIGH);
       } else {
         int diodeState = digitalRead(rightTestDiodeUp);
-        digitalWrite(rightTestDiodeUp, !diodeState);
+        rightFaultState = 1;
+        digitalWrite(rightTestDiodeUp, HIGH);
       }
     }
 
@@ -151,9 +160,13 @@ void loop() {
      *
      * INPUT: C
      */
-    if (inputData.charAt(0) == 'C') {
+    if (inputData.charAt(0) == 'C' || inputData.charAt(0) == 'c') {
+      Serial.println("[SYSTEM] clear states");
+
       leftNumOfActiveDiodes = 0;
       rightNumOfActiveDiodes = 0;
+      leftFaultState = 0;
+      rightFaultState = 0;
 
       digitalWrite(leftTestDiodeUp, LOW);
       digitalWrite(leftTestDiodeDown, LOW);
@@ -181,9 +194,7 @@ void initDiodeArr(Side side, int state) {
 // Funkcja wykonująca test panelu lewego
 void performLeftSideTest() {
   if (digitalRead(leftTestButton) == LOW) {
-    Serial.println("LEFT CLICK");
-    int beforeFaultState = digitalRead(leftTestDiodeUp);
-
+    Serial.println("[SYSTEM] input->click left side test");
     for (int i = 0; i < 3; i++) {
       digitalWrite(leftTestDiodeUp, HIGH);
       digitalWrite(leftTestDiodeDown, HIGH);
@@ -192,16 +203,14 @@ void performLeftSideTest() {
       digitalWrite(leftTestDiodeDown, LOW);
       delay(1000);
     }
-
-    digitalWrite(leftTestDiodeUp, beforeFaultState);
   }
+  digitalWrite(leftTestDiodeUp, leftFaultState);
 }
 
 // Funkcja wykonująca test panelu prawego
 void performRightSideTest() {
   if (digitalRead(rightTestButton) == LOW) {
-    int beforeFaultState = digitalRead(rightTestDiodeUp);
-
+    Serial.println("[SYSTEM] input->click right side test");
     for (int i = 0; i < 3; i++) {
       digitalWrite(rightTestDiodeUp, HIGH);
       digitalWrite(rightTestDiodeDown, HIGH);
@@ -210,20 +219,28 @@ void performRightSideTest() {
       digitalWrite(rightTestDiodeDown, LOW);
       delay(1000);
     }
-
-    digitalWrite(rightTestDiodeUp, beforeFaultState);
   }
+  digitalWrite(rightTestDiodeUp, rightFaultState);
 }
 
 // Funkcja wykonująca recall
 void performRecall() {
   if (digitalRead(recallButton) == LOW) {
-    digitalWrite(recallDiodeUp, HIGH);
-    digitalWrite(recallDiodeDown, HIGH);
+      Serial.println("[SYSTEM] input->click recall");
 
-    for (int i = 0; i < 8; i++) {
-      digitalWrite(leftDiodeArr[i], HIGH);
-      digitalWrite(rightDiodeArr[i], HIGH);
+      for (int i = 0; i < leftNumOfActiveDiodes; i++) {
+        digitalWrite(leftDiodeArr[i], HIGH);
+      }
+
+      for (int i = 0; i < rightNumOfActiveDiodes; i++) {
+        digitalWrite(rightDiodeArr[i], HIGH);
+      }
+
+      delay(20);
+
+    if(leftNumOfActiveDiodes >= 4 || rightNumOfActiveDiodes >= 4) {
+      digitalWrite(recallDiodeUp, HIGH);
+      digitalWrite(recallDiodeDown, HIGH);
     }
 
   } else {
@@ -233,14 +250,6 @@ void performRecall() {
     for (int i = 0; i < 8; i++) {
       digitalWrite(leftDiodeArr[i], LOW);
       digitalWrite(rightDiodeArr[i], LOW);
-    }
-
-    for (int i = 0; i < leftNumOfActiveDiodes; i++) {
-      digitalWrite(leftDiodeArr[i], HIGH);
-    }
-
-    for (int i = 0; i < rightNumOfActiveDiodes; i++) {
-      digitalWrite(rightDiodeArr[i], HIGH);
     }
   }
 }
@@ -277,9 +286,3 @@ void initRecallPanel() {
   pinMode(recallDiodeDown, OUTPUT);
   digitalWrite(recallDiodeDown, LOW);
 }
-
-// Inicjalizacja diod podświetlających
-// void initBacklightDiodes() {
-//   pinMode(backlightDiodes, OUTPUT);
-//   digitalWrite(backlightDiodes, HIGH);
-// }
